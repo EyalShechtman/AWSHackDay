@@ -9,6 +9,7 @@ import { PortfolioChart } from './components/PortfolioChart';
 import { TradesTable } from './components/TradesTable';
 import { Header } from './components/Header';
 import { BrainCircuitIcon } from './components/icons';
+import TwitterAnalysis from './components/TwitterAnalysis';
 
 export default function App() {
   const [investmentStrategy, setInvestmentStrategy] = useState<string>(INITIAL_STRATEGY);
@@ -18,6 +19,8 @@ export default function App() {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [portfolioHistory, setPortfolioHistory] = useState<PortfolioDataPoint[]>(INITIAL_PORTFOLIO_HISTORY);
   const [agentOutputs, setAgentOutputs] = useState<Record<string, AgentOutput>>({});
+  const [showTwitterAnalysis, setShowTwitterAnalysis] = useState<boolean>(true);
+  const [detectedStocks, setDetectedStocks] = useState<string[]>([]);
 
   const handleRunCycle = useCallback(async () => {
     setProcessStatus('running');
@@ -26,10 +29,10 @@ export default function App() {
     setAgentOutputs({});
 
     try {
-      // Step 1: Twitter Agent
-      setCurrentStep('Twitter Agent');
+      // Step 1: Enhanced Twitter Agent
+      setCurrentStep('Enhanced Twitter Agent');
       const trendingStocks = await geminiService.getTrendingStocks();
-      setAgentOutputs(prev => ({ ...prev, 'Twitter Agent': { text: `Simulating Grok analysis of X/Twitter.\nIdentified trending stocks: ${trendingStocks.join(', ')}` } }));
+              setAgentOutputs(prev => ({ ...prev, 'Enhanced Twitter Agent': { text: `Simulating Grok analysis of X/Twitter.\nIdentified trending stocks: ${trendingStocks.join(', ')}` } }));
 
       // Step 2: Finance Data Agent
       setCurrentStep('Finance Data Agent');
@@ -77,6 +80,10 @@ export default function App() {
         <Header />
         <main className="mt-8 grid grid-cols-1 lg:grid-cols-3 gap-8">
           <div className="lg:col-span-1 flex flex-col gap-8">
+            <TwitterAnalysis 
+              isVisible={showTwitterAnalysis} 
+              onStocksDetected={setDetectedStocks} 
+            />
             <StrategyEditor value={investmentStrategy} onChange={setInvestmentStrategy} disabled={isRunning} />
             <div className="bg-gray-800 rounded-lg p-6 shadow-lg">
               <button
