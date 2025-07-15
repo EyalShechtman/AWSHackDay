@@ -1,0 +1,6 @@
+{
+  "name": "Agentic Investment System",
+  "description": "An AI-powered system that uses a pipeline of agents to analyze market data, formulate investment strategies based on user preferences, and recommend trades.",
+  "requestFramePermissions": [],
+  "prompt": ""
+}
