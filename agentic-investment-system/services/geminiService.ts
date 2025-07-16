@@ -11,6 +11,17 @@ if (!process.env.API_KEY) {
 const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 const grokService = new GrokService();
 
+/**
+ * Simple helper for generating content with Gemini
+ */
+export async function generateContent(prompt: string): Promise<string> {
+    const response = await ai.models.generateContent({
+        model: 'gemini-2.5-flash',
+        contents: prompt,
+    });
+    return response.text || '';
+}
+
 export interface FinancialDataResult {
     summary: string;
     sources: Source[];

@@ -1,4 +1,5 @@
 // Simple Twitter Agent using Grok + Tool Calling for live data
+import * as geminiService from './geminiService';
 
 export interface StockResult {
   ticker: string;
@@ -106,10 +107,12 @@ export class GrokService {
 
       const data = await response.json();
       console.log('✅ Grok API response received');
+      console.log('🔍 FULL GROK RESPONSE:', JSON.stringify(data, null, 2));
       
       // Parse the response to extract stock tickers and reasons
       const content = data.choices[0].message.content;
-      const stocks = this.parseStocksFromResponse(content);
+      console.log('📄 GROK CONTENT:', content);
+      const stocks = await this.parseStocksWithGemini(content);
       
       return stocks;
       
@@ -119,52 +122,78 @@ export class GrokService {
     }
   }
 
-  private parseStocksFromResponse(content: string): StockResult[] {
-    console.log('📝 Parsing stocks from Grok response...');
+  private async parseStocksWithGemini(content: string): Promise<StockResult[]> {
+    console.log('🤖 Using Gemini to extract stocks from Grok response...');
     
-    const stocks: StockResult[] = [];
-    
-    // Look for patterns like "TICKER - reason" or "TICKER: reason"
-    const patterns = [
-      /(\b[A-Z]{2,5}\b)\s*[-:]\s*(.+?)(?=\n|\d+\.|$)/g,
-      /(\b[A-Z]{2,5}\b)\s*\(([^)]+)\)/g,
-      /\*\*(\b[A-Z]{2,5}\b)\*\*[:\s]*(.+?)(?=\n|$)/g
-    ];
-    
-    for (const pattern of patterns) {
-      let match;
-      while ((match = pattern.exec(content)) !== null && stocks.length < 15) {
-        const ticker = match[1].trim();
-        const reason = match[2].trim().replace(/^\d+\.\s*/, '').substring(0, 100);
-        
-        // Filter out common non-ticker words
-        if (!this.isValidTicker(ticker)) continue;
-        
-        // Avoid duplicates
-        if (stocks.some(s => s.ticker === ticker)) continue;
-        
-        stocks.push({ ticker, reason });
-      }
-    }
-    
-    // If we didn't find enough, extract any stock tickers mentioned
-    if (stocks.length < 10) {
-      const tickerRegex = /\b[A-Z]{3,5}\b/g;
-      const foundTickers = content.match(tickerRegex) || [];
+    try {
+      const prompt = `
+Extract stock tickers and reasons from this Twitter/Grok analysis. Return EXACTLY 15 stocks in JSON format.
+
+Here's the Grok response to parse:
+${content}
+
+Extract stocks mentioned and return as a JSON array with this exact format:
+[
+  {"ticker": "PLTR", "reason": "Strong AI momentum on Twitter"},
+  {"ticker": "SOFI", "reason": "Fintech discussions trending"},
+  ...
+]
+
+Rules:
+- Return exactly 15 stocks
+- Ticker must be 2-5 uppercase letters (valid stock symbols)
+- Exclude mega caps like AAPL, MSFT, GOOGL, AMZN, TSLA, NVDA, META
+- Keep reasons under 100 characters
+- Focus on stocks mentioned in Twitter discussions
+- Return only valid JSON array, no other text
+`;
+
+      const geminiResponse = await geminiService.generateContent(prompt);
+      console.log('🤖 Gemini extraction response:', geminiResponse);
       
-      for (const ticker of foundTickers) {
-        if (stocks.length >= 15) break;
-        if (!this.isValidTicker(ticker)) continue;
-        if (stocks.some(s => s.ticker === ticker)) continue;
+      // Parse the JSON response
+      let stocks: StockResult[] = [];
+      try {
+        // Clean the response to extract just the JSON
+        const jsonMatch = geminiResponse.match(/\[[\s\S]*\]/);
+        if (jsonMatch) {
+          stocks = JSON.parse(jsonMatch[0]);
+        } else {
+          throw new Error('No JSON array found in response');
+        }
+      } catch (parseError) {
+        console.error('❌ Failed to parse Gemini JSON response:', parseError);
+        console.log('Raw Gemini response:', geminiResponse);
         
-        stocks.push({ 
-          ticker, 
-          reason: 'Mentioned in Twitter discussions' 
-        });
+        // Fallback: try to extract tickers manually
+        const tickerMatches = content.match(/\b[A-Z]{2,5}\b/g) || [];
+        const validTickers = tickerMatches
+          .filter(ticker => this.isValidTicker(ticker))
+          .slice(0, 15);
+          
+        stocks = validTickers.map(ticker => ({
+          ticker,
+          reason: 'Extracted from Twitter analysis'
+        }));
       }
+      
+      console.log(`✅ Extracted ${stocks.length} stocks via Gemini`);
+      return stocks.slice(0, 15);
+      
+    } catch (error) {
+      console.error('❌ Gemini extraction failed:', error);
+      
+      // Simple fallback extraction
+      const tickerMatches = content.match(/\b[A-Z]{2,5}\b/g) || [];
+      const validTickers = tickerMatches
+        .filter(ticker => this.isValidTicker(ticker))
+        .slice(0, 15);
+        
+      return validTickers.map(ticker => ({
+        ticker,
+        reason: 'Fallback extraction from Twitter data'
+      }));
     }
-    
-    return stocks.slice(0, 15);
   }
 
   private isValidTicker(ticker: string): boolean {
